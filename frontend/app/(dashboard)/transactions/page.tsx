@@ -1,4 +1,6 @@
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import SyncButton from '@/components/SyncButton'
 
 type Transaction = {
   id: string
@@ -10,8 +12,20 @@ type Transaction = {
   matches: { id: string }[] | null
 }
 
-export default async function TransactionsPage() {
+export default async function TransactionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ bank_connected?: string; bank_error?: string }>
+}) {
   const supabase = await createClient()
+  const params = await searchParams
+
+  const { data: connections } = await supabase
+    .from('bank_connections')
+    .select('id')
+    .limit(1)
+
+  const hasConnection = connections && connections.length > 0
 
   const { data: transactions, error } = await supabase
     .from('transactions')
@@ -26,62 +40,88 @@ export default async function TransactionsPage() {
     )
   }
 
-  if (!transactions || transactions.length === 0) {
-    return (
-      <div className="text-center py-16">
-        <p className="text-slate-500 text-sm">No transactions yet.</p>
-        <p className="text-slate-400 text-xs mt-2">
-          Transactions will appear here once Enable Banking syncs your account.
-        </p>
-      </div>
-    )
-  }
-
   return (
     <div>
-      <h2 className="text-base font-semibold text-slate-900 mb-4">
-        Transactions
-        <span className="ml-2 text-sm font-normal text-slate-500">
-          {transactions.length} total
-        </span>
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-semibold text-slate-900">
+          Transactions
+          {transactions && transactions.length > 0 && (
+            <span className="ml-2 text-sm font-normal text-slate-500">
+              {transactions.length} total
+            </span>
+          )}
+        </h2>
+        {hasConnection ? (
+          <SyncButton />
+        ) : (
+          <Link
+            href="/banking/connect"
+            className="text-sm bg-slate-900 text-white rounded-md px-3 py-1.5"
+          >
+            Connect Bank
+          </Link>
+        )}
+      </div>
 
-      <ul className="space-y-2">
-        {(transactions as Transaction[]).map((txn) => {
-          const matched = txn.matches !== null && txn.matches.length > 0
-          return (
-            <li
-              key={txn.id}
-              className="bg-white rounded-lg border border-slate-200 px-4 py-3 flex items-center justify-between"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-900 truncate">
-                  {txn.description}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {txn.date}
-                  {txn.source_bank && ` · ${txn.source_bank}`}
-                </p>
-              </div>
-              <div className="flex items-center gap-3 ml-4 shrink-0">
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full ${
-                    matched
-                      ? 'bg-green-50 text-green-700'
-                      : 'bg-amber-50 text-amber-700'
-                  }`}
-                >
-                  {matched ? 'Matched' : 'Unmatched'}
-                </span>
-                <span className="text-sm font-medium text-slate-900 tabular-nums">
-                  {txn.amount < 0 ? '-' : '+'}
-                  {Math.abs(txn.amount).toFixed(2)} {txn.currency}
-                </span>
-              </div>
-            </li>
-          )
-        })}
-      </ul>
+      {params.bank_connected && (
+        <div className="mb-4 text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+          Bank connected. Press <strong>Sync</strong> to import your transactions.
+        </div>
+      )}
+
+      {params.bank_error && (
+        <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+          Bank connection failed. Please try again.
+        </div>
+      )}
+
+      {!transactions || transactions.length === 0 ? (
+        <div className="text-center py-16">
+          <p className="text-slate-500 text-sm">No transactions yet.</p>
+          {hasConnection && (
+            <p className="text-slate-400 text-xs mt-2">
+              Press Sync to import your transactions.
+            </p>
+          )}
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {(transactions as Transaction[]).map((txn) => {
+            const matched = txn.matches !== null && txn.matches.length > 0
+            return (
+              <li
+                key={txn.id}
+                className="bg-white rounded-lg border border-slate-200 px-4 py-3 flex items-center justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900 truncate">
+                    {txn.description}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {txn.date}
+                    {txn.source_bank && ` · ${txn.source_bank}`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 ml-4 shrink-0">
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full ${
+                      matched
+                        ? 'bg-green-50 text-green-700'
+                        : 'bg-amber-50 text-amber-700'
+                    }`}
+                  >
+                    {matched ? 'Matched' : 'Unmatched'}
+                  </span>
+                  <span className="text-sm font-medium text-slate-900 tabular-nums">
+                    {txn.amount < 0 ? '-' : '+'}
+                    {Math.abs(txn.amount).toFixed(2)} {txn.currency}
+                  </span>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </div>
   )
 }
