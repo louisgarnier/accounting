@@ -6,6 +6,8 @@ const withPWA = require('next-pwa')({
   disable: process.env.NODE_ENV === 'development',
 })
 
-const nextConfig: NextConfig = {}
+const nextConfig: NextConfig = {
+  turbopack: {},
+}
 
 module.exports = withPWA(nextConfig)
