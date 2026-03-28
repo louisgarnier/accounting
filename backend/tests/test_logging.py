@@ -113,7 +113,7 @@ def test_api_middleware_logs_failed_requests(caplog):
 
 # --- log_to_supabase ---
 
-def test_log_to_supabase_inserts_entry_in_background(monkeypatch):
+def test_log_to_supabase_inserts_entry_in_background():
     """log_to_supabase writes to Supabase logs table in a background thread."""
     import time
     from unittest.mock import MagicMock, patch
@@ -132,7 +132,7 @@ def test_log_to_supabase_inserts_entry_in_background(monkeypatch):
     assert inserted["layer"] == "backend"
 
 
-def test_log_to_supabase_does_not_raise_on_error(monkeypatch):
+def test_log_to_supabase_does_not_raise_on_error():
     """log_to_supabase never raises even if Supabase is unavailable."""
     import time
     from unittest.mock import patch
