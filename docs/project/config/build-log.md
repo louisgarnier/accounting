@@ -6,9 +6,12 @@
 
 ### Completed
 - Design spec written and approved
+- Task 1: Project infrastructure
+- Task 2: Supabase schema
+- Task 3: FastAPI backend scaffold (health endpoint, Docker, conftest env mock)
 
 ### In Progress
-- Task 1: Project infrastructure
+_None_
 
 ### Blockers
 _None_
