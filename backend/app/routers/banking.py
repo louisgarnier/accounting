@@ -1,0 +1,139 @@
+import uuid
+from datetime import date, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+
+from app.auth import get_current_user
+from app.config import FRONTEND_URL
+from app.database import get_db
+from app.services.enable_banking import create_session, fetch_transactions, start_auth
+
+router = APIRouter(prefix="/api/banking")
+
+# The URL Enable Banking redirects to after the user authorises
+REDIRECT_URL = f"{FRONTEND_URL}/banking/callback"
+
+
+class ConnectRequest(BaseModel):
+    bank_name: str
+    bank_country: str
+
+
+class SessionRequest(BaseModel):
+    code: str
+
+
+@router.post("/connect")
+async def connect_bank(req: ConnectRequest, user=Depends(get_current_user)):
+    """Start bank connection — returns Enable Banking authorization URL."""
+    state = str(uuid.uuid4())
+    try:
+        url = start_auth(req.bank_name, req.bank_country, REDIRECT_URL, state)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Enable Banking error: {exc}")
+    return {"url": url}
+
+
+@router.post("/sessions")
+async def create_banking_session(req: SessionRequest, user=Depends(get_current_user)):
+    """Exchange authorization code for session; store all accounts."""
+    try:
+        accounts = create_session(req.code)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Enable Banking error: {exc}")
+
+    db = get_db()
+    # Replace any previous connections (re-auth scenario)
+    db.table("bank_connections").delete().eq("user_id", str(user.id)).execute()
+
+    for acc in accounts:
+        db.table("bank_connections").insert(
+            {
+                "user_id": str(user.id),
+                "session_id": acc["session_id"],
+                "account_uid": acc["account_uid"],
+                "account_iban": acc.get("account_iban", ""),
+                "account_name": acc.get("account_name", ""),
+                "institution_name": acc.get("institution_name", ""),
+            }
+        ).execute()
+
+    return {"connected": len(accounts)}
+
+
+@router.post("/sync")
+async def sync_transactions(user=Depends(get_current_user)):
+    """Pull latest 90 days of transactions from all connected accounts."""
+    db = get_db()
+    connections = (
+        db.table("bank_connections")
+        .select("account_uid, institution_name")
+        .eq("user_id", str(user.id))
+        .execute()
+    )
+
+    if not connections.data:
+        raise HTTPException(status_code=404, detail="No bank connections found. Connect a bank first.")
+
+    date_from = (date.today() - timedelta(days=90)).isoformat()
+    total_saved = 0
+
+    for conn in connections.data:
+        try:
+            raw_txns = fetch_transactions(conn["account_uid"], date_from)
+        except Exception:
+            continue  # skip this account, try next
+
+        for txn in raw_txns:
+            external_id = txn.get("transaction_id") or txn.get("entry_reference")
+            if not external_id:
+                continue
+
+            # Dedup by external_id
+            existing = (
+                db.table("transactions")
+                .select("id")
+                .eq("external_id", external_id)
+                .execute()
+            )
+            if existing.data:
+                continue
+
+            raw_amount = txn.get("transaction_amount", {}).get("amount", "0")
+            try:
+                amount = float(raw_amount)
+            except (ValueError, TypeError):
+                amount = 0.0
+
+            # DBIT = money leaving account = negative
+            if txn.get("credit_debit_indicator", "DBIT") == "DBIT":
+                amount = -abs(amount)
+            else:
+                amount = abs(amount)
+
+            remittance = txn.get("remittance_information", [])
+            description = (
+                " ".join(remittance)
+                if remittance
+                else (
+                    txn.get("creditor", {}).get("name")
+                    or txn.get("debtor", {}).get("name")
+                    or "No description"
+                )
+            )
+
+            db.table("transactions").insert(
+                {
+                    "user_id": str(user.id),
+                    "external_id": external_id,
+                    "date": txn.get("booking_date") or txn.get("value_date"),
+                    "amount": amount,
+                    "description": description,
+                    "currency": txn.get("transaction_amount", {}).get("currency", "EUR"),
+                    "source_bank": conn["institution_name"],
+                }
+            ).execute()
+            total_saved += 1
+
+    return {"synced": total_saved}
