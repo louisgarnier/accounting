@@ -3,6 +3,7 @@ import httpx
 import jwt as pyjwt
 from datetime import datetime, timezone, timedelta
 from app.config import ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY
+from app.logger import backend_logger
 
 ENABLE_BANKING_BASE_URL = "https://api.enablebanking.com"
 
@@ -47,7 +48,11 @@ def start_auth(bank_name: str, bank_country: str, redirect_url: str, state: str)
         headers=_auth_headers(),
         timeout=10.0,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        backend_logger.error(f"❌ [EnableBanking] start_auth {e.response.status_code}: {e.response.text}")
+        raise RuntimeError(f"Enable Banking {e.response.status_code}: {e.response.text}") from e
     return resp.json()["url"]
 
 
@@ -59,7 +64,11 @@ def create_session(code: str) -> list[dict]:
         headers=_auth_headers(),
         timeout=10.0,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        backend_logger.error(f"❌ [EnableBanking] create_session {e.response.status_code}: {e.response.text}")
+        raise RuntimeError(f"Enable Banking {e.response.status_code}: {e.response.text}") from e
     data = resp.json()
     institution_name = data.get("aspsp", {}).get("name", "Unknown")
     session_id = data["session_id"]
@@ -87,7 +96,11 @@ def fetch_transactions(account_uid: str, date_from: str) -> list[dict]:
             headers=_auth_headers(),
             timeout=15.0,
         )
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            backend_logger.error(f"❌ [EnableBanking] fetch_transactions {e.response.status_code}: {e.response.text}")
+            raise RuntimeError(f"Enable Banking {e.response.status_code}: {e.response.text}") from e
         data = resp.json()
         transactions.extend(data.get("transactions", []))
         continuation_key = data.get("continuation_key")
