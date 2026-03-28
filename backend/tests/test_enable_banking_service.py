@@ -60,7 +60,7 @@ def test_start_auth_returns_url():
     assert body["aspsp"]["country"] == "FR"
     assert body["redirect_url"] == "https://myapp.com/callback"
     assert body["state"] == "state-xyz"
-    assert body["access"]["transactions"] is True
+    assert "valid_until" in body["access"]
 
 
 def test_create_session_returns_accounts():

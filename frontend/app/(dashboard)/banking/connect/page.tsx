@@ -12,7 +12,7 @@ const BANKS = [
   { name: 'Banque Populaire', country: 'FR' },
   { name: 'La Banque Postale', country: 'FR' },
   { name: 'HSBC France', country: 'FR' },
-  { name: 'Revolut', country: 'FR' },
+  { name: 'Revolut', country: 'GB' },
 ]
 
 export default function ConnectBankPage() {

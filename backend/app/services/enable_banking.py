@@ -37,8 +37,6 @@ def start_auth(bank_name: str, bank_country: str, redirect_url: str, state: str)
         json={
             "access": {
                 "valid_until": valid_until,
-                "transactions": True,
-                "balances": False,
             },
             "aspsp": {"name": bank_name, "country": bank_country},
             "state": state,
