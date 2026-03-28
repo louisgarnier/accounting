@@ -109,3 +109,36 @@ def test_api_middleware_logs_failed_requests(caplog):
     assert response.status_code == 404
     messages = [r.message for r in caplog.records]
     assert any("404" in m for m in messages)
+
+
+# --- log_to_supabase ---
+
+def test_log_to_supabase_inserts_entry_in_background(monkeypatch):
+    """log_to_supabase writes to Supabase logs table in a background thread."""
+    import time
+    from unittest.mock import MagicMock, patch
+
+    mock_db = MagicMock()
+    mock_db.table.return_value.insert.return_value.execute.return_value = MagicMock()
+
+    with patch("app.logger._get_db_for_logging", return_value=mock_db):
+        from app.logger import log_to_supabase
+        log_to_supabase({"layer": "backend", "level": "info", "message": "test"})
+        time.sleep(0.05)  # let the background thread finish
+
+    mock_db.table.assert_called_with("logs")
+    inserted = mock_db.table.return_value.insert.call_args[0][0]
+    assert inserted["message"] == "test"
+    assert inserted["layer"] == "backend"
+
+
+def test_log_to_supabase_does_not_raise_on_error(monkeypatch):
+    """log_to_supabase never raises even if Supabase is unavailable."""
+    import time
+    from unittest.mock import patch
+
+    with patch("app.logger._get_db_for_logging", side_effect=Exception("db down")):
+        from app.logger import log_to_supabase
+        log_to_supabase({"layer": "backend", "level": "error", "message": "oops"})
+        time.sleep(0.05)
+    # No exception raised — test passes by completing
