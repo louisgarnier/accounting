@@ -46,11 +46,14 @@ export default function ConnectBankPage() {
           }),
         }
       )
-      if (!resp.ok) throw new Error('Connection failed')
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}))
+        throw new Error(body.detail || `HTTP ${resp.status}`)
+      }
       const { url } = await resp.json()
       window.location.href = url
-    } catch {
-      setError('Could not connect to your bank. Please try again.')
+    } catch (e) {
+      setError(`Could not connect: ${e instanceof Error ? e.message : 'unknown error'}`)
       setLoading(false)
     }
   }
