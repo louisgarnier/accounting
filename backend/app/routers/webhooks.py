@@ -31,6 +31,8 @@ def save_transactions(transactions: list[dict], source_bank: str) -> int:
             or txn.get("transaction_id")
         )
         if not external_id:
+            import sys
+            print(f"⚠️ [Webhooks] Skipping transaction with no external_id: {txn}", file=sys.stderr)
             continue
 
         existing = (
@@ -43,8 +45,12 @@ def save_transactions(transactions: list[dict], source_bank: str) -> int:
             continue
 
         amount_data = txn.get("transaction_amount", {})
-        amount_str = amount_data.get("amount", "0")
+        raw_amount = amount_data.get("amount") or "0"
         currency = amount_data.get("currency", "EUR")
+        try:
+            amount_str = float(raw_amount)
+        except (ValueError, TypeError):
+            amount_str = 0.0
         booking_date = txn.get("booking_date") or txn.get("value_date")
         description = (
             txn.get("remittance_information_unstructured")
@@ -58,7 +64,7 @@ def save_transactions(transactions: list[dict], source_bank: str) -> int:
             "user_id": APP_USER_ID,
             "external_id": external_id,
             "date": booking_date,
-            "amount": float(amount_str),
+            "amount": amount_str,
             "description": description,
             "currency": currency,
             "source_bank": source_bank,
