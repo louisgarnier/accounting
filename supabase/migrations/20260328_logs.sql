@@ -1,7 +1,7 @@
 -- logs table: receives entries from all layers (frontend, api, backend, database)
 create table if not exists public.logs (
   id           uuid        default gen_random_uuid() primary key,
-  created_at   timestamptz default now(),
+  created_at   timestamptz not null default now(),
   layer        text        not null check (layer in ('frontend', 'api', 'backend', 'database')),
   level        text        not null check (level in ('info', 'warn', 'error')),
   message      text        not null,
@@ -11,7 +11,7 @@ create table if not exists public.logs (
   status_code  integer,
   duration_ms  integer,
   context      jsonb,
-  user_id      uuid references auth.users(id)
+  user_id      uuid references auth.users(id) on delete set null
 );
 
 -- Backend (service role) has full access — bypasses RLS
@@ -22,6 +22,9 @@ create policy "users can insert own logs"
   on public.logs for insert
   to authenticated
   with check (auth.uid() = user_id);
+
+-- Note: no SELECT policy — authenticated users write-only.
+-- Service role (backend) reads all rows via service key (bypasses RLS).
 
 -- Index for common queries
 create index logs_created_at_idx on public.logs (created_at desc);
