@@ -142,3 +142,33 @@ def test_log_to_supabase_does_not_raise_on_error():
         log_to_supabase({"layer": "backend", "level": "error", "message": "oops"})
         time.sleep(0.05)
     # No exception raised — test passes by completing
+
+
+# --- Middleware: timing and request_id ---
+
+def test_api_middleware_includes_timing_ms(caplog):
+    """Response log includes duration in milliseconds."""
+    with caplog.at_level(logging.INFO, logger="api"):
+        client.get("/health")
+
+    messages = [r.message for r in caplog.records]
+    assert any("ms" in m for m in messages)
+
+
+def test_api_middleware_echoes_x_request_id_header(caplog):
+    """When X-Request-ID is provided, it appears in the log and response header."""
+    with caplog.at_level(logging.INFO, logger="api"):
+        response = client.get("/health", headers={"X-Request-ID": "test-req-123"})
+
+    assert response.headers.get("X-Request-ID") == "test-req-123"
+    messages = [r.message for r in caplog.records]
+    assert any("test-req-123" in m for m in messages)
+
+
+def test_api_middleware_generates_request_id_when_missing(caplog):
+    """When X-Request-ID is absent, the middleware generates one and includes it in the response."""
+    with caplog.at_level(logging.INFO, logger="api"):
+        response = client.get("/health")
+
+    assert "X-Request-ID" in response.headers
+    assert len(response.headers["X-Request-ID"]) == 36  # UUID format
