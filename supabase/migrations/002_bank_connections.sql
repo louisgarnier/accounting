@@ -19,3 +19,5 @@ create policy "own_bank_connections"
   on bank_connections for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+create index idx_bank_connections_user_id on bank_connections(user_id);
