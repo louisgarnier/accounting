@@ -47,6 +47,21 @@ def test_db_select_raises_on_exception(mock_db):
         db_select("transactions", lambda t: t.select("id"))
 
 
+def test_db_select_raises_logs_duration_ms(mock_db):
+    """db_select error log entry includes duration_ms."""
+    from app.db_logger import db_select
+
+    mock_db.table.return_value.select.return_value.execute.side_effect = RuntimeError("db error")
+
+    with patch("app.db_logger.log_to_supabase") as mock_log:
+        with pytest.raises(RuntimeError):
+            db_select("transactions", lambda t: t.select("id"))
+
+    error_calls = [c for c in mock_log.call_args_list if c[0][0].get("level") == "error"]
+    assert error_calls, "expected at least one error-level log_to_supabase call"
+    assert "duration_ms" in error_calls[0][0][0], "duration_ms must be present in error log entry"
+
+
 def test_db_insert_returns_inserted_row(mock_db):
     """db_insert executes the insert and returns the first inserted row."""
     from app.db_logger import db_insert
@@ -71,6 +86,21 @@ def test_db_insert_raises_on_exception(mock_db):
         db_insert("transactions", {"amount": 0})
 
 
+def test_db_insert_raises_logs_duration_ms(mock_db):
+    """db_insert error log entry includes duration_ms."""
+    from app.db_logger import db_insert
+
+    mock_db.table.return_value.insert.return_value.execute.side_effect = RuntimeError("constraint")
+
+    with patch("app.db_logger.log_to_supabase") as mock_log:
+        with pytest.raises(RuntimeError):
+            db_insert("transactions", {"amount": 0})
+
+    error_calls = [c for c in mock_log.call_args_list if c[0][0].get("level") == "error"]
+    assert error_calls, "expected at least one error-level log_to_supabase call"
+    assert "duration_ms" in error_calls[0][0][0], "duration_ms must be present in error log entry"
+
+
 def test_db_delete_returns_deleted_count(mock_db):
     """db_delete executes the delete and returns the count of deleted rows."""
     from app.db_logger import db_delete
@@ -93,3 +123,18 @@ def test_db_delete_returns_zero_on_no_match(mock_db):
     count = db_delete("bank_connections", lambda t: t.delete().eq("user_id", "nobody"))
 
     assert count == 0
+
+
+def test_db_delete_raises_logs_duration_ms(mock_db):
+    """db_delete error log entry includes duration_ms."""
+    from app.db_logger import db_delete
+
+    mock_db.table.return_value.delete.return_value.eq.return_value.execute.side_effect = RuntimeError("gone")
+
+    with patch("app.db_logger.log_to_supabase") as mock_log:
+        with pytest.raises(RuntimeError):
+            db_delete("bank_connections", lambda t: t.delete().eq("user_id", "u1"))
+
+    error_calls = [c for c in mock_log.call_args_list if c[0][0].get("level") == "error"]
+    assert error_calls, "expected at least one error-level log_to_supabase call"
+    assert "duration_ms" in error_calls[0][0][0], "duration_ms must be present in error log entry"

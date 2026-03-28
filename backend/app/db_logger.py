@@ -16,12 +16,13 @@ def _log(operation: str, table: str, duration_ms: int, extra: dict) -> None:
     })
 
 
-def _log_error(operation: str, table: str, error: Exception) -> None:
+def _log_error(operation: str, table: str, error: Exception, duration_ms: int) -> None:
     db_logger.error(f"❌ [DB] {operation} {table} error: {error}")
     log_to_supabase({
         "layer": "database",
         "level": "error",
         "message": f"{operation} {table} failed",
+        "duration_ms": duration_ms,
         "context": {"table": table, "operation": operation, "error": str(error)},
     })
 
@@ -35,7 +36,9 @@ def db_select(table: str, build_query: Callable) -> list:
         _log("select", table, int((time.monotonic() - start) * 1000), {"rows_returned": rows})
         return result.data or []
     except Exception as e:
-        _log_error("select", table, e)
+        duration_ms = int((time.monotonic() - start) * 1000)
+        # `filter` is omitted from context: the callable pattern doesn't expose filter details
+        _log_error("select", table, e, duration_ms)
         raise
 
 
@@ -47,7 +50,8 @@ def db_insert(table: str, row: dict) -> dict:
         _log("insert", table, int((time.monotonic() - start) * 1000), {"rows_inserted": 1})
         return result.data[0] if result.data else {}
     except Exception as e:
-        _log_error("insert", table, e)
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _log_error("insert", table, e, duration_ms)
         raise
 
 
@@ -60,5 +64,7 @@ def db_delete(table: str, build_query: Callable) -> int:
         _log("delete", table, int((time.monotonic() - start) * 1000), {"rows_deleted": rows})
         return rows
     except Exception as e:
-        _log_error("delete", table, e)
+        duration_ms = int((time.monotonic() - start) * 1000)
+        # `filter` is omitted from context: the callable pattern doesn't expose filter details
+        _log_error("delete", table, e, duration_ms)
         raise
