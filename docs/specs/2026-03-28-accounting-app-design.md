@@ -105,6 +105,15 @@ matches
   transaction_id uuid FK → transactions.id UNIQUE  -- one transaction → one document
   document_id    uuid FK → documents.id UNIQUE     -- one document → one transaction
   matched_at     timestamptz
+
+integrations
+  id             uuid PK
+  user_id        uuid FK → auth.users.id
+  provider       text          -- outlook | gmail | drive
+  folder_id      text          -- provider-specific folder/label ID
+  folder_name    text          -- human-readable name shown in UI (e.g. "Invoices")
+  refresh_token  text          -- encrypted OAuth refresh token
+  created_at     timestamptz
 ```
 
 ---
@@ -122,11 +131,13 @@ matches
 8. User corrects if needed, confirms → record saved
 
 ### 4.2 Email Import — Outlook & Gmail (US-04)
-1. User triggers import from settings
-2. FastAPI calls Microsoft Graph API (Outlook) or Gmail API using stored OAuth token
-3. For each attachment found: compute MD5 hash, check against `documents.file_hash`
-4. Skip duplicates; process new files through same OCR pipeline as upload
-5. `source` set to `outlook` or `gmail`
+1. User connects Outlook or Gmail via OAuth (one-time setup)
+2. User selects which folder/label to import from (e.g. "Invoices") — saved as a setting per account
+3. User manually triggers import
+4. FastAPI fetches attachments from the selected folder only via Microsoft Graph API or Gmail API
+5. For each attachment: compute MD5 hash, check against `documents.file_hash`
+6. Skip duplicates; process new files through same OCR pipeline as upload
+7. `source` set to `outlook` or `gmail`
 
 ### 4.3 Google Drive Import (US-04b)
 1. User connects Google Drive (one-time OAuth) and selects a folder to import from
