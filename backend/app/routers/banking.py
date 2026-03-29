@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -106,8 +106,6 @@ async def create_banking_session(req: SessionRequest, user=Depends(get_current_u
 @router.post("/sync")
 async def sync_transactions(req: SyncRequest, user=Depends(get_current_user)):
     """Pull transactions for one account. full_sync=True uses 90-day window; default uses last_synced."""
-    from datetime import datetime, timezone
-
     db = get_db()
     conn_result = (
         db.table("bank_connections")
@@ -124,7 +122,7 @@ async def sync_transactions(req: SyncRequest, user=Depends(get_current_user)):
     if req.full_sync or not conn.get("last_synced"):
         date_from = (date.today() - timedelta(days=90)).isoformat()
     else:
-        date_from = conn["last_synced"][:10]  # take YYYY-MM-DD portion
+        date_from = datetime.fromisoformat(conn["last_synced"]).date().isoformat()
 
     try:
         raw_txns = fetch_transactions(conn["account_uid"], date_from)
