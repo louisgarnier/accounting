@@ -49,7 +49,7 @@ def start_auth(bank_name: str, bank_country: str, redirect_url: str, state: str)
             "aspsp": {"name": bank_name, "country": bank_country},
             "state": state,
             "redirect_url": redirect_url,
-            "psu_type": "personal",
+            "psu_type": "business",
         },
         headers=_auth_headers(),
         timeout=10.0,

@@ -70,8 +70,7 @@ def test_connect_returns_502_on_enable_banking_error(client):
 
 def test_sessions_stores_accounts_and_returns_count(client):
     mock_db = MagicMock()
-    mock_db.table.return_value.delete.return_value.eq.return_value.execute.return_value = MagicMock()
-    mock_db.table.return_value.insert.return_value.execute.return_value = MagicMock()
+    mock_db.table.return_value.upsert.return_value.execute.return_value = MagicMock()
     with patch("app.routers.banking.create_session", return_value=[
         {
             "session_id": "sess-1",
@@ -89,6 +88,33 @@ def test_sessions_stores_accounts_and_returns_count(client):
             )
     assert resp.status_code == 200
     assert resp.json()["connected"] == 1
+
+
+def test_sessions_appends_without_deleting_existing(client):
+    """Connecting a second bank must not remove the first."""
+    mock_db = MagicMock()
+    mock_db.table.return_value.upsert.return_value.execute.return_value = MagicMock()
+    with patch("app.routers.banking.create_session", return_value=[
+        {
+            "session_id": "sess-2",
+            "account_uid": "acc-uid-2",
+            "account_iban": "FR76...",
+            "account_name": "Second",
+            "institution_name": "Société Générale",
+        }
+    ]):
+        with patch("app.routers.banking.get_db", return_value=mock_db):
+            resp = client.post(
+                "/api/banking/sessions",
+                json={"code": "auth-code-2"},
+                headers=auth_headers(),
+            )
+    assert resp.status_code == 200
+    assert resp.json()["connected"] == 1
+    # Must NOT have called delete
+    mock_db.table.return_value.delete.assert_not_called()
+    # Must have called upsert
+    mock_db.table.return_value.upsert.assert_called_once()
 
 
 def test_sessions_returns_502_on_enable_banking_error(client):

@@ -47,18 +47,15 @@ async def connect_bank(req: ConnectRequest, user=Depends(get_current_user)):
 
 @router.post("/sessions")
 async def create_banking_session(req: SessionRequest, user=Depends(get_current_user)):
-    """Exchange authorization code for session; store all accounts."""
+    """Exchange authorization code for session; upsert accounts (never deletes existing connections)."""
     try:
         accounts = create_session(req.code)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Enable Banking error: {exc}")
 
     db = get_db()
-    # Replace any previous connections (re-auth scenario)
-    db.table("bank_connections").delete().eq("user_id", str(user.id)).execute()
-
     for acc in accounts:
-        db.table("bank_connections").insert(
+        db.table("bank_connections").upsert(
             {
                 "user_id": str(user.id),
                 "session_id": acc["session_id"],
@@ -66,7 +63,8 @@ async def create_banking_session(req: SessionRequest, user=Depends(get_current_u
                 "account_iban": acc.get("account_iban", ""),
                 "account_name": acc.get("account_name", ""),
                 "institution_name": acc.get("institution_name", ""),
-            }
+            },
+            on_conflict="account_uid",
         ).execute()
 
     return {"connected": len(accounts)}
