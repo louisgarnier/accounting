@@ -34,6 +34,14 @@ async def list_aspsps(country: str = "FR", user=Depends(get_current_user)):
     return {"aspsps": [{"name": a["name"], "country": a["country"]} for a in aspsps]}
 
 
+@router.delete("/connections/{account_uid}")
+async def remove_connection(account_uid: str, user=Depends(get_current_user)):
+    """Remove a specific bank connection for the current user."""
+    db = get_db()
+    db.table("bank_connections").delete().eq("user_id", str(user.id)).eq("account_uid", account_uid).execute()
+    return {"removed": True}
+
+
 @router.get("/connections")
 async def list_connections(user=Depends(get_current_user)):
     """Return all bank connections for the current user."""

@@ -224,3 +224,26 @@ def test_sync_debit_amount_is_negative(client):
             client.post("/api/banking/sync", headers=auth_headers())
     assert len(saved_rows) == 1, "Expected exactly one transaction to be inserted"
     assert saved_rows[0]["amount"] < 0, f"DBIT amount should be negative, got {saved_rows[0]['amount']}"
+
+
+def test_remove_connection_deletes_and_returns_ok(client):
+    mock_db = MagicMock()
+    mock_db.table.return_value.delete.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock()
+    with patch("app.routers.banking.get_db", return_value=mock_db):
+        resp = client.delete("/api/banking/connections/acc-uid-1", headers=auth_headers())
+    assert resp.status_code == 200
+    assert resp.json() == {"removed": True}
+
+
+def test_remove_connection_scoped_to_user(client):
+    """Delete must filter by both user_id and account_uid."""
+    mock_db = MagicMock()
+    mock_db.table.return_value.delete.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock()
+    with patch("app.routers.banking.get_db", return_value=mock_db):
+        client.delete("/api/banking/connections/acc-uid-1", headers=auth_headers())
+    # Verify the chain was called with correct args
+    mock_db.table.assert_called_with("bank_connections")
+    first_eq = mock_db.table.return_value.delete.return_value.eq
+    first_eq.assert_called_with("user_id", "681fe954-ab83-4767-bcdc-d6e04b329171")
+    second_eq = first_eq.return_value.eq
+    second_eq.assert_called_with("account_uid", "acc-uid-1")
