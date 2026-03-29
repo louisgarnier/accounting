@@ -34,6 +34,20 @@ async def list_aspsps(country: str = "FR", user=Depends(get_current_user)):
     return {"aspsps": [{"name": a["name"], "country": a["country"]} for a in aspsps]}
 
 
+@router.get("/connections")
+async def list_connections(user=Depends(get_current_user)):
+    """Return all bank connections for the current user."""
+    db = get_db()
+    result = (
+        db.table("bank_connections")
+        .select("account_uid, account_name, account_iban, institution_name, last_synced")
+        .eq("user_id", str(user.id))
+        .order("created_at")
+        .execute()
+    )
+    return {"connections": result.data}
+
+
 @router.post("/connect")
 async def connect_bank(req: ConnectRequest, user=Depends(get_current_user)):
     """Start bank connection — returns Enable Banking authorization URL."""

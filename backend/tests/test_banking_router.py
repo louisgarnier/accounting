@@ -161,6 +161,35 @@ def test_sync_returns_404_if_no_connections(client):
     assert resp.status_code == 404
 
 
+def test_list_connections_returns_all_banks(client):
+    mock_db = MagicMock()
+    mock_db.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(
+        data=[
+            {
+                "account_uid": "acc-uid-1",
+                "account_name": "Main",
+                "account_iban": "FR76...",
+                "institution_name": "BNP Paribas",
+                "last_synced": None,
+            },
+            {
+                "account_uid": "acc-uid-2",
+                "account_name": "Business",
+                "account_iban": "GB29...",
+                "institution_name": "Revolut",
+                "last_synced": "2026-03-29T10:00:00+00:00",
+            },
+        ]
+    )
+    with patch("app.routers.banking.get_db", return_value=mock_db):
+        resp = client.get("/api/banking/connections", headers=auth_headers())
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["connections"]) == 2
+    assert data["connections"][0]["institution_name"] == "BNP Paribas"
+    assert data["connections"][1]["last_synced"] == "2026-03-29T10:00:00+00:00"
+
+
 def test_sync_debit_amount_is_negative(client):
     """DBIT transactions must be stored as negative amounts."""
     saved_rows = []
