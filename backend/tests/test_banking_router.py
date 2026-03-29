@@ -85,9 +85,12 @@ def test_sessions_returns_502_on_enable_banking_error(client):
 
 def test_sync_saves_transactions_and_returns_count(client):
     mock_db = MagicMock()
-    mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
-        data=[{"account_uid": "acc-uid-1", "institution_name": "BNP Paribas"}]
-    )
+    # First call: connections query returns one account.
+    # Second call: dedup check returns empty (transaction not seen before).
+    mock_db.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+        MagicMock(data=[{"account_uid": "acc-uid-1", "institution_name": "BNP Paribas"}]),
+        MagicMock(data=[]),
+    ]
     mock_db.table.return_value.insert.return_value.execute.return_value = MagicMock()
     with patch("app.routers.banking.fetch_transactions", return_value=[
         {
@@ -101,7 +104,7 @@ def test_sync_saves_transactions_and_returns_count(client):
         with patch("app.routers.banking.get_db", return_value=mock_db):
             resp = client.post("/api/banking/sync", headers=auth_headers())
     assert resp.status_code == 200
-    assert "synced" in resp.json()
+    assert resp.json()["synced"] == 1
 
 
 def test_sync_returns_404_if_no_connections(client):
@@ -143,5 +146,5 @@ def test_sync_debit_amount_is_negative(client):
     ]):
         with patch("app.routers.banking.get_db", return_value=mock_db):
             client.post("/api/banking/sync", headers=auth_headers())
-    if saved_rows:
-        assert saved_rows[0]["amount"] < 0
+    assert len(saved_rows) == 1, "Expected exactly one transaction to be inserted"
+    assert saved_rows[0]["amount"] < 0, f"DBIT amount should be negative, got {saved_rows[0]['amount']}"
