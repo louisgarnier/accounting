@@ -12,10 +12,10 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
     global supabase_admin
-    if supabase_admin is None:
-        supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     token = credentials.credentials
     try:
+        if supabase_admin is None:
+            supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
         response = supabase_admin.auth.get_user(token)
         return response.user
     except HTTPException:
