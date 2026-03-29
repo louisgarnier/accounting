@@ -93,6 +93,7 @@ async def startup_event():
         "SUPABASE_URL", "SUPABASE_SERVICE_KEY", "FRONTEND_URL",
         "APP_USER_ID", "ENABLE_BANKING_WEBHOOK_SECRET",
         "ENABLE_BANKING_APP_ID", "ENABLE_BANKING_PRIVATE_KEY",
+        "GOOGLE_VISION_API_KEY",
     ]
     presence = {var: bool(os.getenv(var)) for var in env_vars}
     backend_logger.info(f"🚀 [Backend] starting — env vars: {presence}")

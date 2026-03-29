@@ -138,3 +138,47 @@ def test_upload_saves_failed_ocr_record(client):
 
     assert resp.status_code == 200
     assert resp.json()["ocr_status"] == "failed"
+
+
+def test_confirm_updates_document_fields(client):
+    mock_db = MagicMock()
+    mock_db.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"id": "doc-uuid-1"}]
+    )
+
+    with patch("app.routers.documents.get_db", return_value=mock_db):
+        resp = client.patch(
+            "/api/documents/doc-uuid-1/confirm",
+            json={"date": "2026-03-15", "amount": 42.50, "vendor": "Amazon EU", "category_id": None},
+            headers=auth_headers(),
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"confirmed": True}
+    mock_db.table.return_value.update.assert_called_once()
+    update_payload = mock_db.table.return_value.update.call_args[0][0]
+    assert update_payload["date"] == "2026-03-15"
+    assert update_payload["amount"] == 42.50
+    assert update_payload["vendor"] == "Amazon EU"
+    assert "stored_filename" in update_payload
+
+
+def test_confirm_updates_stored_filename(client):
+    """Confirming with corrected fields regenerates stored_filename."""
+    mock_db = MagicMock()
+    mock_db.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"id": "doc-uuid-1"}]
+    )
+
+    with patch("app.routers.documents.get_db", return_value=mock_db):
+        resp = client.patch(
+            "/api/documents/doc-uuid-1/confirm",
+            json={"date": "2026-03-20", "amount": 99.99, "vendor": "Total Station", "category_id": None},
+            headers=auth_headers(),
+        )
+
+    assert resp.status_code == 200
+    update_payload = mock_db.table.return_value.update.call_args[0][0]
+    assert "2026-03-20" in update_payload["stored_filename"]
+    assert "total_station" in update_payload["stored_filename"]
+    assert "99.99" in update_payload["stored_filename"]
