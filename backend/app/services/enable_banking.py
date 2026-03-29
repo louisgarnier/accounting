@@ -10,8 +10,11 @@ ENABLE_BANKING_BASE_URL = "https://api.enablebanking.com"
 
 def _make_jwt() -> str:
     now = int(time.time())
-    # Railway stores the key with literal \n — normalise to real newlines
-    private_key = ENABLE_BANKING_PRIVATE_KEY.replace("\\n", "\n")
+    # Normalise: Railway may store literal \n instead of real newlines
+    private_key = ENABLE_BANKING_PRIVATE_KEY.replace("\\n", "\n").strip()
+    # Add PEM headers if Railway stripped them
+    if private_key and not private_key.startswith("-----BEGIN"):
+        private_key = f"-----BEGIN PRIVATE KEY-----\n{private_key}\n-----END PRIVATE KEY-----"
     return pyjwt.encode(
         {
             "iss": "enablebanking.com",
