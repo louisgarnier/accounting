@@ -1,0 +1,4 @@
+-- EPIC-5: documents Storage bucket
+-- Manual step required: create bucket named 'documents' (private) in Supabase dashboard.
+-- RLS policy 'own_documents_storage' is in 001_initial_schema.sql — re-run if bucket was created after initial migration.
+-- No schema changes in this migration.
