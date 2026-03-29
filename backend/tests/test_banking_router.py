@@ -103,12 +103,14 @@ def test_sessions_returns_502_on_enable_banking_error(client):
 
 def test_sync_saves_transactions_and_returns_count(client):
     mock_db = MagicMock()
-    # First call: connections query returns one account.
-    # Second call: dedup check returns empty (transaction not seen before).
-    mock_db.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
-        MagicMock(data=[{"account_uid": "acc-uid-1", "institution_name": "BNP Paribas"}]),
-        MagicMock(data=[]),
-    ]
+    # Connections query: .table().select().eq(user_id).execute()  — single .eq()
+    mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"account_uid": "acc-uid-1", "institution_name": "BNP Paribas", "account_name": "Main"}]
+    )
+    # Dedup query: .table().select().eq(account_uid).eq(external_id).execute() — double .eq()
+    mock_db.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[]  # not seen before
+    )
     mock_db.table.return_value.insert.return_value.execute.return_value = MagicMock()
     with patch("app.routers.banking.fetch_transactions", return_value=[
         {
@@ -144,14 +146,14 @@ def test_sync_debit_amount_is_negative(client):
         return m
 
     mock_db = MagicMock()
-    # connections query
-    connections_result = MagicMock(data=[{"account_uid": "acc-uid-1", "institution_name": "BNP"}])
-    # dedup check: no existing transaction
-    dedup_result = MagicMock(data=[])
-    mock_db.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
-        connections_result,
-        dedup_result,
-    ]
+    # Connections query: single .eq()
+    mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"account_uid": "acc-uid-1", "institution_name": "BNP", "account_name": "Main"}]
+    )
+    # Dedup query: double .eq()
+    mock_db.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[]  # not seen before
+    )
     mock_db.table.return_value.insert.side_effect = fake_insert
     with patch("app.routers.banking.fetch_transactions", return_value=[
         {

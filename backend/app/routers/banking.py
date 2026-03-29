@@ -78,7 +78,7 @@ async def sync_transactions(user=Depends(get_current_user)):
     db = get_db()
     connections = (
         db.table("bank_connections")
-        .select("account_uid, institution_name")
+        .select("account_uid, institution_name, account_name")
         .eq("user_id", str(user.id))
         .execute()
     )
@@ -106,10 +106,11 @@ async def sync_transactions(user=Depends(get_current_user)):
                 backend_logger.warning(f"⚠️ [Banking] skipped txn — no external_id. Keys: {list(txn.keys())} | remittance: {txn.get('remittance_information')} | amount: {txn.get('transaction_amount')}")
                 continue
 
-            # Dedup by external_id
+            # Dedup by (account_uid, external_id) — FX pairs share an external_id across accounts
             existing = (
                 db.table("transactions")
                 .select("id")
+                .eq("account_uid", conn["account_uid"])
                 .eq("external_id", external_id)
                 .execute()
             )
@@ -143,6 +144,7 @@ async def sync_transactions(user=Depends(get_current_user)):
                 {
                     "user_id": str(user.id),
                     "external_id": external_id,
+                    "account_uid": conn["account_uid"],
                     "date": txn.get("booking_date") or txn.get("value_date"),
                     "amount": amount,
                     "description": description,
