@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.auth import get_current_user
 from app.config import FRONTEND_URL
 from app.database import get_db
-from app.services.enable_banking import create_session, fetch_transactions, start_auth
+from app.services.enable_banking import create_session, fetch_transactions, get_aspsps, start_auth
 
 router = APIRouter(prefix="/api/banking")
 
@@ -22,6 +22,16 @@ class ConnectRequest(BaseModel):
 
 class SessionRequest(BaseModel):
     code: str
+
+
+@router.get("/aspsps")
+async def list_aspsps(country: str = "FR", user=Depends(get_current_user)):
+    """Return supported banks for a given country code."""
+    try:
+        aspsps = get_aspsps(country)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Enable Banking error: {exc}")
+    return {"aspsps": [{"name": a["name"], "country": a["country"]} for a in aspsps]}
 
 
 @router.post("/connect")

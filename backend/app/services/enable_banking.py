@@ -9,12 +9,17 @@ ENABLE_BANKING_BASE_URL = "https://api.enablebanking.com"
 
 
 def _make_jwt() -> str:
+    import textwrap
     now = int(time.time())
-    # Normalise: Railway may store literal \n instead of real newlines
-    private_key = ENABLE_BANKING_PRIVATE_KEY.replace("\\n", "\n").strip()
-    # Add PEM headers if Railway stripped them
-    if private_key and not private_key.startswith("-----BEGIN"):
-        private_key = f"-----BEGIN PRIVATE KEY-----\n{private_key}\n-----END PRIVATE KEY-----"
+    raw = ENABLE_BANKING_PRIVATE_KEY.replace("\\n", "\n").strip()
+    if raw.startswith("-----BEGIN"):
+        private_key = raw
+    else:
+        # Railway may store the key body with or without internal newlines.
+        # Strip all whitespace and reformat into standard 64-char PEM lines.
+        body = "".join(raw.split())
+        wrapped = "\n".join(textwrap.wrap(body, 64))
+        private_key = f"-----BEGIN PRIVATE KEY-----\n{wrapped}\n-----END PRIVATE KEY-----"
     return pyjwt.encode(
         {
             "iss": "enablebanking.com",
@@ -84,6 +89,23 @@ def create_session(code: str) -> list[dict]:
             "institution_name": institution_name,
         })
     return accounts
+
+
+def get_aspsps(country: str) -> list[dict]:
+    """Return list of supported ASPSPs for a given country code (e.g. 'FR', 'GB')."""
+    resp = httpx.get(
+        f"{ENABLE_BANKING_BASE_URL}/aspsps",
+        params={"country": country},
+        headers=_auth_headers(),
+        timeout=10.0,
+    )
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        backend_logger.error(f"❌ [EnableBanking] get_aspsps {e.response.status_code}: {e.response.text}")
+        raise RuntimeError(f"Enable Banking {e.response.status_code}: {e.response.text}") from e
+    data = resp.json()
+    return data.get("aspsps", [])
 
 
 def fetch_transactions(account_uid: str, date_from: str) -> list[dict]:

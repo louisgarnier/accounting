@@ -29,6 +29,24 @@ def client():
     return TestClient(app)
 
 
+def test_aspsps_returns_bank_list(client):
+    with patch("app.routers.banking.get_aspsps", return_value=[
+        {"name": "BNP Paribas", "country": "FR"},
+        {"name": "Société Générale", "country": "FR"},
+    ]):
+        resp = client.get("/api/banking/aspsps?country=FR", headers=auth_headers())
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["aspsps"]) == 2
+    assert data["aspsps"][0]["name"] == "BNP Paribas"
+
+
+def test_aspsps_returns_502_on_error(client):
+    with patch("app.routers.banking.get_aspsps", side_effect=Exception("API error")):
+        resp = client.get("/api/banking/aspsps?country=FR", headers=auth_headers())
+    assert resp.status_code == 502
+
+
 def test_connect_returns_url(client):
     with patch("app.routers.banking.start_auth", return_value="https://ob.enablebanking.com/auth?s=x"):
         resp = client.post(

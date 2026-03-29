@@ -1,31 +1,56 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
-const BANKS = [
-  { name: 'BNP Paribas', country: 'FR' },
-  { name: 'Société Générale', country: 'FR' },
-  { name: 'Crédit Agricole', country: 'FR' },
-  { name: 'LCL', country: 'FR' },
-  { name: "Caisse d'Épargne", country: 'FR' },
-  { name: 'Banque Populaire', country: 'FR' },
-  { name: 'La Banque Postale', country: 'FR' },
-  { name: 'HSBC France', country: 'FR' },
-  { name: 'Revolut', country: 'GB' },
-]
+interface Bank {
+  name: string
+  country: string
+}
 
 export default function ConnectBankPage() {
+  const [banks, setBanks] = useState<Bank[]>([])
   const [selectedBank, setSelectedBank] = useState('')
+  const [country, setCountry] = useState('FR')
   const [loading, setLoading] = useState(false)
+  const [loadingBanks, setLoadingBanks] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    async function fetchBanks() {
+      setLoadingBanks(true)
+      setError('')
+      setBanks([])
+      setSelectedBank('')
+      const supabase = createClient()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      try {
+        const resp = await fetch(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/banking/aspsps?country=${country}`,
+          {
+            headers: { Authorization: `Bearer ${session?.access_token}` },
+          }
+        )
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        const data = await resp.json()
+        setBanks(data.aspsps || [])
+      } catch (e) {
+        setError(`Could not load banks: ${e instanceof Error ? e.message : 'unknown error'}`)
+      } finally {
+        setLoadingBanks(false)
+      }
+    }
+    fetchBanks()
+  }, [country])
 
   async function handleConnect() {
     if (!selectedBank) return
     setLoading(true)
     setError('')
 
-    const bank = BANKS.find((b) => b.name === selectedBank)!
+    const bank = banks.find((b) => b.name === selectedBank)!
     const supabase = createClient()
     const {
       data: { session },
@@ -68,15 +93,33 @@ export default function ConnectBankPage() {
       </p>
 
       <label className="block text-sm font-medium text-slate-700 mb-1">
+        Country
+      </label>
+      <select
+        value={country}
+        onChange={(e) => setCountry(e.target.value)}
+        className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm mb-4 bg-white"
+      >
+        <option value="FR">France</option>
+        <option value="GB">United Kingdom</option>
+        <option value="DE">Germany</option>
+        <option value="ES">Spain</option>
+        <option value="IT">Italy</option>
+      </select>
+
+      <label className="block text-sm font-medium text-slate-700 mb-1">
         Select your bank
       </label>
       <select
         value={selectedBank}
         onChange={(e) => setSelectedBank(e.target.value)}
         className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm mb-4 bg-white"
+        disabled={loadingBanks}
       >
-        <option value="">— choose a bank —</option>
-        {BANKS.map((b) => (
+        <option value="">
+          {loadingBanks ? 'Loading banks…' : '— choose a bank —'}
+        </option>
+        {banks.map((b) => (
           <option key={b.name} value={b.name}>
             {b.name}
           </option>
@@ -87,7 +130,7 @@ export default function ConnectBankPage() {
 
       <button
         onClick={handleConnect}
-        disabled={!selectedBank || loading}
+        disabled={!selectedBank || loading || loadingBanks}
         className="w-full bg-slate-900 text-white text-sm font-medium rounded-md px-4 py-2 disabled:opacity-50"
       >
         {loading ? 'Redirecting…' : 'Connect'}
