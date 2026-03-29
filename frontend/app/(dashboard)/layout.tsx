@@ -19,6 +19,12 @@ export default function DashboardLayout({
               Transactions
             </Link>
             <Link
+              href="/documents"
+              className="text-sm text-slate-600 hover:text-slate-900"
+            >
+              Documents
+            </Link>
+            <Link
               href="/banking"
               className="text-sm text-slate-600 hover:text-slate-900"
             >
