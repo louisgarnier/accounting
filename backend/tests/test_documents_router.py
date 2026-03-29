@@ -182,3 +182,18 @@ def test_confirm_updates_stored_filename(client):
     assert "2026-03-20" in update_payload["stored_filename"]
     assert "total_station" in update_payload["stored_filename"]
     assert "99.99" in update_payload["stored_filename"]
+
+
+def test_confirm_returns_404_when_document_not_found(client):
+    mock_db = MagicMock()
+    # Update returns empty data — document not found or wrong user
+    mock_db.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+
+    with patch("app.routers.documents.get_db", return_value=mock_db):
+        resp = client.patch(
+            "/api/documents/nonexistent-id/confirm",
+            json={"date": "2026-03-15", "amount": 42.50, "vendor": "Test", "category_id": None},
+            headers=auth_headers(),
+        )
+
+    assert resp.status_code == 404

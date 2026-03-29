@@ -126,13 +126,16 @@ async def confirm_document(
     stored_filename = f"{date_part}_{vendor_part}_{amount_part}"
 
     db = get_db()
-    db.table("documents").update({
+    result = db.table("documents").update({
         "date": req.date,
         "amount": req.amount,
         "vendor": req.vendor,
         "category_id": req.category_id,
         "stored_filename": stored_filename,
     }).eq("id", document_id).eq("user_id", str(user.id)).execute()
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Document not found.")
 
     backend_logger.info(f"✅ [Documents] confirmed doc {document_id}")
     return {"confirmed": True}
