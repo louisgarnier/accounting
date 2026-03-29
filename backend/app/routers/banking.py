@@ -96,8 +96,14 @@ async def sync_transactions(user=Depends(get_current_user)):
             continue  # skip this account, try next
 
         for txn in raw_txns:
-            external_id = txn.get("transaction_id") or txn.get("entry_reference")
+            external_id = (
+                txn.get("transaction_id")
+                or txn.get("entry_reference")
+                or txn.get("internal_transaction_id")
+            )
             if not external_id:
+                from app.logger import backend_logger
+                backend_logger.warning(f"⚠️ [Banking] skipped txn — no external_id. Keys: {list(txn.keys())} | remittance: {txn.get('remittance_information')} | amount: {txn.get('transaction_amount')}")
                 continue
 
             # Dedup by external_id
