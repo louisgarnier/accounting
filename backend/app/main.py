@@ -10,6 +10,7 @@ from app.config import FRONTEND_URL
 from app.logger import api_logger, backend_logger, log_to_supabase
 from app.routers import health
 from app.routers.banking import router as banking_router
+from app.routers.documents import router as documents_router
 from app.routers.protected_test import router as protected_test_router
 from app.routers.webhooks import router as webhooks_router
 
@@ -82,6 +83,7 @@ app.include_router(health.router)
 app.include_router(protected_test_router)
 app.include_router(webhooks_router)
 app.include_router(banking_router)
+app.include_router(documents_router)
 
 
 @app.on_event("startup")
