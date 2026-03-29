@@ -188,6 +188,7 @@ def test_list_connections_returns_all_banks(client):
     assert len(data["connections"]) == 2
     assert data["connections"][0]["institution_name"] == "BNP Paribas"
     assert data["connections"][1]["last_synced"] == "2026-03-29T10:00:00+00:00"
+    assert data["connections"][0]["account_uid"] == "acc-uid-1"
 
 
 def test_sync_debit_amount_is_negative(client):

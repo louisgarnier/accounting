@@ -38,13 +38,16 @@ async def list_aspsps(country: str = "FR", user=Depends(get_current_user)):
 async def list_connections(user=Depends(get_current_user)):
     """Return all bank connections for the current user."""
     db = get_db()
-    result = (
-        db.table("bank_connections")
-        .select("account_uid, account_name, account_iban, institution_name, last_synced")
-        .eq("user_id", str(user.id))
-        .order("created_at")
-        .execute()
-    )
+    try:
+        result = (
+            db.table("bank_connections")
+            .select("account_uid, account_name, account_iban, institution_name, last_synced")
+            .eq("user_id", str(user.id))
+            .order("created_at")
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Database error: {exc}")
     return {"connections": result.data}
 
 
