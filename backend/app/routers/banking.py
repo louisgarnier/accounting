@@ -38,7 +38,10 @@ async def list_aspsps(country: str = "FR", user=Depends(get_current_user)):
 async def remove_connection(account_uid: str, user=Depends(get_current_user)):
     """Remove a specific bank connection for the current user."""
     db = get_db()
-    db.table("bank_connections").delete().eq("user_id", str(user.id)).eq("account_uid", account_uid).execute()
+    try:
+        db.table("bank_connections").delete().eq("user_id", str(user.id)).eq("account_uid", account_uid).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Database error: {exc}")
     return {"removed": True}
 
 
