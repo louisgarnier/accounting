@@ -33,24 +33,20 @@
 ---
 
 ## Stage: Plan 3 — Enable Banking Integration
-**Status:** In progress
+**Status:** Complete
 **Started:** 2026-03-28
+**Completed:** 2026-03-29
 
 ### Completed
-- Task 1: bank_connections Supabase migration written (needs manual run in dashboard)
+- Task 1: bank_connections Supabase migration (002_bank_connections.sql)
 - Task 2: Enable Banking service — JWT RS256 + API client (5/5 tests passing)
-- Task 3: Banking router — connect/sessions/sync endpoints (7/7 tests passing)
-- Task 4: Connect Bank page + OAuth callback handler (frontend, build passes)
-- Task 5: Sync button + updated Transactions page (frontend, build passes)
-- EPIC-4: Logging middleware — request timing, X-Request-ID, Supabase log writer (14 tests passing)
-- Fixed: CORS `allow_origins` strip trailing slash from FRONTEND_URL
-- Fixed: test_banking_router false positives — mock chain collision on multi-call DB mocks
-
-### Next Steps
-- Task 6: Pre-deploy checklist (run tests + build) → commit all ✓
-- Task 7: Push + watch Railway + Vercel build logs
-- Task 8: Register callback URL in Enable Banking portal
-- Task 9: End-to-end test
-
-### Blockers
-_None_
+- Task 3: Banking router — connect/sessions/sync endpoints (9/9 tests passing)
+- Task 4: Connect Bank page + OAuth callback handler (frontend)
+- Task 5: Sync button + updated Transactions page (frontend)
+- Task 6: Pre-deploy checklist passed (43/43 tests, build clean)
+- Task 7: Deployed — Railway + Vercel live
+- Task 8: Callback URL registered in Enable Banking portal
+- Task 9: End-to-end test passed — Revolut connected, transactions synced
+- EPIC-4: Logging middleware — request timing, X-Request-ID, Supabase log writer
+- Fixed: ASPSP names now fetched dynamically from Enable Banking API (no hardcoded list)
+- Fixed: FX pairs (e.g. "Exchanged from CAD Main") were deduped as duplicates — changed unique key to (account_uid, external_id); migration 003_transactions_account_uid.sql

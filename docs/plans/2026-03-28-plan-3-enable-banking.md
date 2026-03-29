@@ -73,6 +73,87 @@ Never use `if saved_rows:` as a guard before an assertion — remove the guard a
 
 ---
 
+### Task 0: Local dev setup ✅ REQUIRED BEFORE ANYTHING ELSE
+
+Without this, you cannot run scripts, query logs, or debug locally.
+
+**Files:**
+- Create: `backend/.env` (git-ignored, never commit)
+
+- [ ] **Step 1: Copy the example and fill in real values**
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Then open `backend/.env` and fill in:
+- `SUPABASE_URL` — Supabase Dashboard → Settings → API → Project URL
+- `SUPABASE_SERVICE_KEY` — Supabase Dashboard → Settings → API → service_role key (not anon)
+- `APP_USER_ID` — your Supabase user UUID (Auth → Users → your account)
+- `ENABLE_BANKING_WEBHOOK_SECRET` — Enable Banking portal → your app → webhook secret
+- `ENABLE_BANKING_APP_ID` — `4ab7c74d-943b-45d7-be5b-343e8744eb92`
+- `ENABLE_BANKING_PRIVATE_KEY` — full PEM, same value as Railway env var
+
+- [ ] **Step 2: Verify it works**
+
+```bash
+cd backend && python3 -c "
+from dotenv import load_dotenv; load_dotenv()
+import os
+from supabase import create_client
+db = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_KEY'])
+rows = db.table('logs').select('id').limit(1).execute()
+print('OK — Supabase connected, logs table accessible')
+"
+```
+
+Expected: `OK — Supabase connected, logs table accessible`
+
+- [ ] **Step 3: Confirm .env is git-ignored**
+
+```bash
+grep -q ".env" backend/.gitignore && echo "OK — .env is ignored" || echo "ADD .env TO .gitignore NOW"
+```
+
+If it prints the warning, run:
+```bash
+echo ".env" >> backend/.gitignore
+```
+
+---
+
+## Log query cheatsheet
+
+Run these any time you need to see what's happening in production:
+
+```bash
+# All errors in the last hour
+cd backend && python3 -c "
+from dotenv import load_dotenv; load_dotenv()
+import os
+from supabase import create_client
+db = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_KEY'])
+rows = db.table('logs').select('created_at,layer,message,context').eq('level','error').order('created_at', desc=True).limit(30).execute()
+for r in rows.data:
+    print(r['created_at'][:19], r['layer'], '|', r['message'])
+    if r.get('context'): print('  ', r['context'])
+"
+
+# All banking-related logs (info + error)
+cd backend && python3 -c "
+from dotenv import load_dotenv; load_dotenv()
+import os
+from supabase import create_client
+db = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_KEY'])
+rows = db.table('logs').select('created_at,level,layer,message,context').ilike('message','%banking%').order('created_at', desc=True).limit(30).execute()
+for r in rows.data:
+    print(r['created_at'][:19], r['level'].upper(), '|', r['message'])
+    if r.get('context'): print('  ', r['context'])
+"
+```
+
+---
+
 ### Task 1: Supabase migration — bank_connections table ✅ DONE
 
 Migration file at `supabase/migrations/002_bank_connections.sql`.
