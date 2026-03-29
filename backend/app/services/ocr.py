@@ -1,10 +1,13 @@
 import base64
+import logging
 import re
 from datetime import datetime
 
 import httpx
 
 from app.config import GOOGLE_VISION_API_KEY
+
+logger = logging.getLogger(__name__)
 
 VISION_API_URL = "https://vision.googleapis.com/v1/images:annotate"
 
@@ -90,12 +93,14 @@ def extract_fields(file_bytes: bytes, mime_type: str) -> dict:
             }]
         }
         resp = httpx.post(
-            f"{VISION_API_URL}?key={GOOGLE_VISION_API_KEY}",
+            VISION_API_URL,
+            params={"key": GOOGLE_VISION_API_KEY},
             json=payload,
             timeout=30,
         )
         data = resp.json()
-    except Exception:
+    except Exception as exc:
+        logger.warning(f"[OCR] Vision API call failed: {exc}")
         return _failed_result()
 
     responses = data.get("responses", [{}])
