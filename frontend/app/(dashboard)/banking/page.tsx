@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import BankSyncButton from '@/components/BankSyncButton'
 
@@ -10,8 +11,13 @@ type Connection = {
   last_synced: string | null
 }
 
-export default async function BanksPage() {
+export default async function BanksPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ bank_connected?: string; bank_error?: string }>
+}) {
   const supabase = await createClient()
+  const params = await searchParams
   const { data: { session } } = await supabase.auth.getSession()
 
   const resp = await fetch(
@@ -26,6 +32,18 @@ export default async function BanksPage() {
 
   return (
     <div>
+      {params.bank_connected && (
+        <div className="mb-4 text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+          Bank connected successfully.
+        </div>
+      )}
+
+      {params.bank_error && (
+        <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+          Bank connection failed. Please try again.
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-base font-semibold text-slate-900">
           Connected Banks
@@ -97,9 +115,9 @@ function RemoveButton({ accountUid, accessToken }: { accountUid: string; accessT
       {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${accessToken}` },
-        cache: 'no-store',
       }
     )
+    revalidatePath('/banking')
   }
 
   return (
