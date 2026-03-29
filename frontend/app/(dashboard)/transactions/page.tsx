@@ -1,6 +1,4 @@
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import SyncButton from '@/components/SyncButton'
 
 type Transaction = {
   id: string
@@ -12,20 +10,8 @@ type Transaction = {
   matches: { id: string }[] | null
 }
 
-export default async function TransactionsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ bank_connected?: string; bank_error?: string }>
-}) {
+export default async function TransactionsPage() {
   const supabase = await createClient()
-  const params = await searchParams
-
-  const { data: connections } = await supabase
-    .from('bank_connections')
-    .select('id')
-    .limit(1)
-
-  const hasConnection = connections && connections.length > 0
 
   const { data: transactions, error } = await supabase
     .from('transactions')
@@ -51,38 +37,14 @@ export default async function TransactionsPage({
             </span>
           )}
         </h2>
-        {hasConnection ? (
-          <SyncButton />
-        ) : (
-          <Link
-            href="/banking/connect"
-            className="text-sm bg-slate-900 text-white rounded-md px-3 py-1.5"
-          >
-            Connect Bank
-          </Link>
-        )}
       </div>
-
-      {params.bank_connected && (
-        <div className="mb-4 text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
-          Bank connected. Press <strong>Sync</strong> to import your transactions.
-        </div>
-      )}
-
-      {params.bank_error && (
-        <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-          Bank connection failed. Please try again.
-        </div>
-      )}
 
       {!transactions || transactions.length === 0 ? (
         <div className="text-center py-16">
           <p className="text-slate-500 text-sm">No transactions yet.</p>
-          {hasConnection && (
-            <p className="text-slate-400 text-xs mt-2">
-              Press Sync to import your transactions.
-            </p>
-          )}
+          <p className="text-slate-400 text-xs mt-2">
+            Go to Banks to connect an account and sync.
+          </p>
         </div>
       ) : (
         <ul className="space-y-2">

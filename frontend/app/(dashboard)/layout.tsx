@@ -18,6 +18,12 @@ export default function DashboardLayout({
             >
               Transactions
             </Link>
+            <Link
+              href="/banking"
+              className="text-sm text-slate-600 hover:text-slate-900"
+            >
+              Banks
+            </Link>
           </nav>
         </div>
         <LogoutButton />

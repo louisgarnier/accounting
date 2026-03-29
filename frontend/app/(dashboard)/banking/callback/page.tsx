@@ -9,7 +9,7 @@ export default async function BankingCallbackPage({
   const params = await searchParams
 
   if (params.error || !params.code) {
-    redirect('/transactions?bank_error=1')
+    redirect('/banking?bank_error=1')
   }
 
   const supabase = await createClient()
@@ -38,5 +38,5 @@ export default async function BankingCallbackPage({
     redirect('/transactions?bank_error=1')
   }
 
-  redirect('/transactions?bank_connected=1')
+  redirect('/banking?bank_connected=1')
 }
