@@ -35,7 +35,7 @@ export default async function BankingCallbackPage({
   )
 
   if (!resp.ok) {
-    redirect('/transactions?bank_error=1')
+    redirect('/banking?bank_error=1')
   }
 
   redirect('/banking?bank_connected=1')
