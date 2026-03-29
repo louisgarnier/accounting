@@ -22,11 +22,11 @@ export default function ConnectBankPage() {
       setError('')
       setBanks([])
       setSelectedBank('')
-      const supabase = createClient()
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
       try {
+        const supabase = createClient()
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
         const resp = await fetch(
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/banking/aspsps?country=${country}`,
           {
