@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import BankSyncButton from '@/components/BankSyncButton'
+import SyncAllButton from '@/components/SyncAllButton'
 
 type Connection = {
   account_uid: string
@@ -53,12 +54,17 @@ export default async function BanksPage({
             </span>
           )}
         </h2>
-        <Link
-          href="/banking/connect"
-          className="text-sm bg-slate-900 text-white rounded-md px-3 py-1.5"
-        >
-          + Add Bank
-        </Link>
+        <div className="flex items-center gap-2">
+          {connections.length > 1 && (
+            <SyncAllButton accountUids={connections.map((c) => c.account_uid)} />
+          )}
+          <Link
+            href="/banking/connect"
+            className="text-sm bg-slate-900 text-white rounded-md px-3 py-1.5"
+          >
+            + Add Bank
+          </Link>
+        </div>
       </div>
 
       {connections.length === 0 ? (
