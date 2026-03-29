@@ -127,40 +127,6 @@ def test_sessions_returns_502_on_enable_banking_error(client):
     assert resp.status_code == 502
 
 
-def test_sync_saves_transactions_and_returns_count(client):
-    mock_db = MagicMock()
-    # Connections query: .table().select().eq(user_id).execute()  — single .eq()
-    mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
-        data=[{"account_uid": "acc-uid-1", "institution_name": "BNP Paribas", "account_name": "Main"}]
-    )
-    # Dedup query: .table().select().eq(account_uid).eq(external_id).execute() — double .eq()
-    mock_db.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
-        data=[]  # not seen before
-    )
-    mock_db.table.return_value.insert.return_value.execute.return_value = MagicMock()
-    with patch("app.routers.banking.fetch_transactions", return_value=[
-        {
-            "transaction_id": "txn-001",
-            "booking_date": "2024-03-01",
-            "transaction_amount": {"amount": "42.50", "currency": "EUR"},
-            "credit_debit_indicator": "DBIT",
-            "remittance_information": ["Coffee shop"],
-        }
-    ]):
-        with patch("app.routers.banking.get_db", return_value=mock_db):
-            resp = client.post("/api/banking/sync", headers=auth_headers())
-    assert resp.status_code == 200
-    assert resp.json()["synced"] == 1
-
-
-def test_sync_returns_404_if_no_connections(client):
-    mock_db = MagicMock()
-    mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
-    with patch("app.routers.banking.get_db", return_value=mock_db):
-        resp = client.post("/api/banking/sync", headers=auth_headers())
-    assert resp.status_code == 404
-
-
 def test_list_connections_returns_all_banks(client):
     mock_db = MagicMock()
     mock_db.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(
@@ -191,6 +157,163 @@ def test_list_connections_returns_all_banks(client):
     assert data["connections"][0]["account_uid"] == "acc-uid-1"
 
 
+def test_sync_incremental_uses_last_synced_date(client):
+    """Incremental sync uses last_synced as date_from."""
+    bank_conn_mock = MagicMock()
+    txn_mock = MagicMock()
+
+    def table_router(name):
+        return bank_conn_mock if name == "bank_connections" else txn_mock
+
+    mock_db = MagicMock()
+    mock_db.table.side_effect = table_router
+
+    bank_conn_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"account_uid": "acc-uid-1", "institution_name": "Revolut", "account_name": "Main", "last_synced": "2026-03-01"}]
+    )
+    bank_conn_mock.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock()
+    txn_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+    txn_mock.insert.return_value.execute.return_value = MagicMock()
+
+    captured = {}
+    def fake_fetch(account_uid, date_from):
+        captured["date_from"] = date_from
+        return []
+
+    with patch("app.routers.banking.fetch_transactions", side_effect=fake_fetch):
+        with patch("app.routers.banking.get_db", return_value=mock_db):
+            resp = client.post(
+                "/api/banking/sync",
+                json={"account_uid": "acc-uid-1", "full_sync": False},
+                headers=auth_headers(),
+            )
+    assert resp.status_code == 200
+    assert captured["date_from"] == "2026-03-01"
+
+
+def test_sync_full_uses_90_day_window(client):
+    """Full sync ignores last_synced and uses 90 days ago."""
+    from datetime import date, timedelta
+    bank_conn_mock = MagicMock()
+    txn_mock = MagicMock()
+
+    def table_router(name):
+        return bank_conn_mock if name == "bank_connections" else txn_mock
+
+    mock_db = MagicMock()
+    mock_db.table.side_effect = table_router
+
+    bank_conn_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"account_uid": "acc-uid-1", "institution_name": "Revolut", "account_name": "Main", "last_synced": "2026-03-01"}]
+    )
+    bank_conn_mock.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock()
+    txn_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+    txn_mock.insert.return_value.execute.return_value = MagicMock()
+
+    captured = {}
+    def fake_fetch(account_uid, date_from):
+        captured["date_from"] = date_from
+        return []
+
+    with patch("app.routers.banking.fetch_transactions", side_effect=fake_fetch):
+        with patch("app.routers.banking.get_db", return_value=mock_db):
+            resp = client.post(
+                "/api/banking/sync",
+                json={"account_uid": "acc-uid-1", "full_sync": True},
+                headers=auth_headers(),
+            )
+    assert resp.status_code == 200
+    expected_date = (date.today() - timedelta(days=90)).isoformat()
+    assert captured["date_from"] == expected_date
+
+
+def test_sync_updates_last_synced_after_fetch(client):
+    """last_synced must be written to bank_connections after sync."""
+    bank_conn_mock = MagicMock()
+    txn_mock = MagicMock()
+
+    def table_router(name):
+        return bank_conn_mock if name == "bank_connections" else txn_mock
+
+    mock_db = MagicMock()
+    mock_db.table.side_effect = table_router
+
+    bank_conn_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"account_uid": "acc-uid-1", "institution_name": "Revolut", "account_name": "Main", "last_synced": None}]
+    )
+    bank_conn_mock.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock()
+    txn_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+    txn_mock.insert.return_value.execute.return_value = MagicMock()
+
+    with patch("app.routers.banking.fetch_transactions", return_value=[]):
+        with patch("app.routers.banking.get_db", return_value=mock_db):
+            resp = client.post(
+                "/api/banking/sync",
+                json={"account_uid": "acc-uid-1", "full_sync": False},
+                headers=auth_headers(),
+            )
+    assert resp.status_code == 200
+    bank_conn_mock.update.assert_called_once()
+    update_payload = bank_conn_mock.update.call_args[0][0]
+    assert "last_synced" in update_payload
+
+
+def test_sync_returns_404_if_connection_not_found(client):
+    bank_conn_mock = MagicMock()
+
+    def table_router(name):
+        return bank_conn_mock
+
+    mock_db = MagicMock()
+    mock_db.table.side_effect = table_router
+    bank_conn_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+
+    with patch("app.routers.banking.get_db", return_value=mock_db):
+        resp = client.post(
+            "/api/banking/sync",
+            json={"account_uid": "nonexistent", "full_sync": False},
+            headers=auth_headers(),
+        )
+    assert resp.status_code == 404
+
+
+def test_sync_saves_transactions_and_returns_count(client):
+    bank_conn_mock = MagicMock()
+    txn_mock = MagicMock()
+
+    def table_router(name):
+        return bank_conn_mock if name == "bank_connections" else txn_mock
+
+    mock_db = MagicMock()
+    mock_db.table.side_effect = table_router
+
+    bank_conn_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"account_uid": "acc-uid-1", "institution_name": "BNP Paribas", "account_name": "Main", "last_synced": None}]
+    )
+    bank_conn_mock.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock()
+    # Dedup check: not seen before
+    txn_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+    txn_mock.insert.return_value.execute.return_value = MagicMock()
+
+    with patch("app.routers.banking.fetch_transactions", return_value=[
+        {
+            "transaction_id": "txn-001",
+            "booking_date": "2024-03-01",
+            "transaction_amount": {"amount": "42.50", "currency": "EUR"},
+            "credit_debit_indicator": "DBIT",
+            "remittance_information": ["Coffee shop"],
+        }
+    ]):
+        with patch("app.routers.banking.get_db", return_value=mock_db):
+            resp = client.post(
+                "/api/banking/sync",
+                json={"account_uid": "acc-uid-1", "full_sync": False},
+                headers=auth_headers(),
+            )
+    assert resp.status_code == 200
+    assert resp.json()["synced"] == 1
+
+
 def test_sync_debit_amount_is_negative(client):
     """DBIT transactions must be stored as negative amounts."""
     saved_rows = []
@@ -201,16 +324,22 @@ def test_sync_debit_amount_is_negative(client):
         m.execute.return_value = MagicMock()
         return m
 
+    bank_conn_mock = MagicMock()
+    txn_mock = MagicMock()
+
+    def table_router(name):
+        return bank_conn_mock if name == "bank_connections" else txn_mock
+
     mock_db = MagicMock()
-    # Connections query: single .eq()
-    mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
-        data=[{"account_uid": "acc-uid-1", "institution_name": "BNP", "account_name": "Main"}]
+    mock_db.table.side_effect = table_router
+
+    bank_conn_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"account_uid": "acc-uid-1", "institution_name": "BNP", "account_name": "Main", "last_synced": None}]
     )
-    # Dedup query: double .eq()
-    mock_db.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
-        data=[]  # not seen before
-    )
-    mock_db.table.return_value.insert.side_effect = fake_insert
+    bank_conn_mock.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock()
+    txn_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+    txn_mock.insert.side_effect = fake_insert
+
     with patch("app.routers.banking.fetch_transactions", return_value=[
         {
             "transaction_id": "txn-debit",
@@ -221,7 +350,11 @@ def test_sync_debit_amount_is_negative(client):
         }
     ]):
         with patch("app.routers.banking.get_db", return_value=mock_db):
-            client.post("/api/banking/sync", headers=auth_headers())
+            client.post(
+                "/api/banking/sync",
+                json={"account_uid": "acc-uid-1", "full_sync": False},
+                headers=auth_headers(),
+            )
     assert len(saved_rows) == 1, "Expected exactly one transaction to be inserted"
     assert saved_rows[0]["amount"] < 0, f"DBIT amount should be negative, got {saved_rows[0]['amount']}"
 

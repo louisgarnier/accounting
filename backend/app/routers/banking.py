@@ -24,6 +24,11 @@ class SessionRequest(BaseModel):
     code: str
 
 
+class SyncRequest(BaseModel):
+    account_uid: str
+    full_sync: bool = False
+
+
 @router.get("/aspsps")
 async def list_aspsps(country: str = "FR", user=Depends(get_current_user)):
     """Return supported banks for a given country code."""
@@ -99,85 +104,93 @@ async def create_banking_session(req: SessionRequest, user=Depends(get_current_u
 
 
 @router.post("/sync")
-async def sync_transactions(user=Depends(get_current_user)):
-    """Pull latest 90 days of transactions from all connected accounts."""
+async def sync_transactions(req: SyncRequest, user=Depends(get_current_user)):
+    """Pull transactions for one account. full_sync=True uses 90-day window; default uses last_synced."""
+    from datetime import datetime, timezone
+
     db = get_db()
-    connections = (
+    conn_result = (
         db.table("bank_connections")
-        .select("account_uid, institution_name, account_name")
+        .select("account_uid, institution_name, account_name, last_synced")
         .eq("user_id", str(user.id))
+        .eq("account_uid", req.account_uid)
         .execute()
     )
+    if not conn_result.data:
+        raise HTTPException(status_code=404, detail="Bank connection not found.")
 
-    if not connections.data:
-        raise HTTPException(status_code=404, detail="No bank connections found. Connect a bank first.")
+    conn = conn_result.data[0]
 
-    date_from = (date.today() - timedelta(days=90)).isoformat()
+    if req.full_sync or not conn.get("last_synced"):
+        date_from = (date.today() - timedelta(days=90)).isoformat()
+    else:
+        date_from = conn["last_synced"][:10]  # take YYYY-MM-DD portion
+
+    try:
+        raw_txns = fetch_transactions(conn["account_uid"], date_from)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Enable Banking error: {exc}")
+
     total_saved = 0
+    for txn in raw_txns:
+        external_id = (
+            txn.get("transaction_id")
+            or txn.get("entry_reference")
+            or txn.get("internal_transaction_id")
+        )
+        if not external_id:
+            from app.logger import backend_logger
+            backend_logger.warning(f"⚠️ [Banking] skipped txn — no external_id. Keys: {list(txn.keys())} | remittance: {txn.get('remittance_information')} | amount: {txn.get('transaction_amount')}")
+            continue
 
-    for conn in connections.data:
+        existing = (
+            db.table("transactions")
+            .select("id")
+            .eq("account_uid", conn["account_uid"])
+            .eq("external_id", external_id)
+            .execute()
+        )
+        if existing.data:
+            continue
+
+        raw_amount = txn.get("transaction_amount", {}).get("amount", "0")
         try:
-            raw_txns = fetch_transactions(conn["account_uid"], date_from)
-        except Exception:
-            continue  # skip this account, try next
+            amount = float(raw_amount)
+        except (ValueError, TypeError):
+            amount = 0.0
 
-        for txn in raw_txns:
-            external_id = (
-                txn.get("transaction_id")
-                or txn.get("entry_reference")
-                or txn.get("internal_transaction_id")
+        if txn.get("credit_debit_indicator", "DBIT") == "DBIT":
+            amount = -abs(amount)
+        else:
+            amount = abs(amount)
+
+        remittance = txn.get("remittance_information", [])
+        description = (
+            " ".join(remittance)
+            if remittance
+            else (
+                txn.get("creditor", {}).get("name")
+                or txn.get("debtor", {}).get("name")
+                or "No description"
             )
-            if not external_id:
-                from app.logger import backend_logger
-                backend_logger.warning(f"⚠️ [Banking] skipped txn — no external_id. Keys: {list(txn.keys())} | remittance: {txn.get('remittance_information')} | amount: {txn.get('transaction_amount')}")
-                continue
+        )
 
-            # Dedup by (account_uid, external_id) — FX pairs share an external_id across accounts
-            existing = (
-                db.table("transactions")
-                .select("id")
-                .eq("account_uid", conn["account_uid"])
-                .eq("external_id", external_id)
-                .execute()
-            )
-            if existing.data:
-                continue
+        db.table("transactions").insert(
+            {
+                "user_id": str(user.id),
+                "external_id": external_id,
+                "account_uid": conn["account_uid"],
+                "date": txn.get("booking_date") or txn.get("value_date"),
+                "amount": amount,
+                "description": description,
+                "currency": txn.get("transaction_amount", {}).get("currency", "EUR"),
+                "source_bank": conn["institution_name"],
+            }
+        ).execute()
+        total_saved += 1
 
-            raw_amount = txn.get("transaction_amount", {}).get("amount", "0")
-            try:
-                amount = float(raw_amount)
-            except (ValueError, TypeError):
-                amount = 0.0
-
-            # DBIT = money leaving account = negative
-            if txn.get("credit_debit_indicator", "DBIT") == "DBIT":
-                amount = -abs(amount)
-            else:
-                amount = abs(amount)
-
-            remittance = txn.get("remittance_information", [])
-            description = (
-                " ".join(remittance)
-                if remittance
-                else (
-                    txn.get("creditor", {}).get("name")
-                    or txn.get("debtor", {}).get("name")
-                    or "No description"
-                )
-            )
-
-            db.table("transactions").insert(
-                {
-                    "user_id": str(user.id),
-                    "external_id": external_id,
-                    "account_uid": conn["account_uid"],
-                    "date": txn.get("booking_date") or txn.get("value_date"),
-                    "amount": amount,
-                    "description": description,
-                    "currency": txn.get("transaction_amount", {}).get("currency", "EUR"),
-                    "source_bank": conn["institution_name"],
-                }
-            ).execute()
-            total_saved += 1
+    db.table("bank_connections").update(
+        {"last_synced": datetime.now(timezone.utc).isoformat()}
+    ).eq("user_id", str(user.id)).eq("account_uid", req.account_uid).execute()
 
     return {"synced": total_saved}
